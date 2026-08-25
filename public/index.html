@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Morelia Casas · Conversaciones</title>
+<style>
+:root{
+  --bg:#0d1117; --panel:#151b23; --panel2:#1b222c; --line:#2a3441;
+  --text:#edf2f7; --muted:#9aa7b6; --accent:#22c55e; --accent2:#16a34a;
+  --bubble:#202936; --human:#164e35; --danger:#ef4444;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,Segoe UI,Arial,sans-serif;height:100vh;overflow:hidden}
+.app{display:grid;grid-template-columns:330px 1fr;height:100vh}
+.sidebar{border-right:1px solid var(--line);background:#10151c;display:flex;flex-direction:column}
+.brand{padding:20px 22px;border-bottom:1px solid var(--line)}
+.brand strong{font-size:20px}.brand small{display:block;color:var(--muted);margin-top:5px}
+.search{padding:14px}.search input{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--text);outline:none}
+.filters{display:flex;gap:7px;padding:0 14px 12px}.filter{border:1px solid var(--line);background:transparent;color:var(--muted);padding:7px 10px;border-radius:999px;cursor:pointer}.filter.active{background:#173321;color:#9af0b5;border-color:#2b6f45}
+.list{overflow:auto;flex:1}
+.item{padding:14px 17px;border-top:1px solid #202833;cursor:pointer}.item:hover{background:#161d26}.item.selected{background:#1a242f;border-left:3px solid var(--accent);padding-left:14px}
+.row{display:flex;justify-content:space-between;gap:8px}.name{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.time{font-size:11px;color:var(--muted)}.preview{color:var(--muted);font-size:13px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{font-size:10px;padding:3px 7px;border-radius:999px;background:#26313e;color:#b9c5d2}.badge.human{background:#174c34;color:#a8f1c0}.badge.pending{background:#4a3b16;color:#f4d67d}
+.main{display:grid;grid-template-rows:76px 1fr 76px;min-width:0}
+.header{border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:#10151c}
+.client h2{margin:0;font-size:18px}.client div{font-size:12px;color:var(--muted);margin-top:4px}
+.actions{display:flex;gap:9px}.btn{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:9px;padding:9px 13px;cursor:pointer}.btn.primary{background:var(--accent2);border-color:var(--accent2);color:white;font-weight:650}.btn.active{background:#174c34;border-color:#2b8a56}
+.chat{overflow:auto;padding:25px 7%;display:flex;flex-direction:column;gap:11px}
+.empty{margin:auto;text-align:center;color:var(--muted)}.empty strong{display:block;color:var(--text);font-size:18px;margin-bottom:7px}
+.msg{max-width:72%;padding:11px 14px;border-radius:13px;background:var(--bubble);line-height:1.45;white-space:pre-wrap}.msg.in{align-self:flex-start;border-bottom-left-radius:4px}.msg.out{align-self:flex-end;background:var(--human);border-bottom-right-radius:4px}.meta{font-size:10px;color:#8e9aa8;margin-top:5px}
+.composer{border-top:1px solid var(--line);padding:14px 24px;display:flex;gap:10px;background:#10151c}.composer textarea{flex:1;resize:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--text);min-height:46px}.composer button{min-width:90px}
+.notice{padding:16px;color:var(--muted);text-align:center}
+@media(max-width:850px){.app{grid-template-columns:270px 1fr}.chat{padding:20px 4%}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><strong>Morelia Casas</strong><small>Centro de conversaciones</small></div>
+    <div class="search"><input id="search" placeholder="Buscar cliente o teléfono…"></div>
+    <div class="filters">
+      <button class="filter active" data-filter="all">Todas</button>
+      <button class="filter" data-filter="IA">IA</button>
+      <button class="filter" data-filter="HUMANO">Humano</button>
+    </div>
+    <div id="list" class="list"><div class="notice">Cargando…</div></div>
+  </aside>
+
+  <main class="main">
+    <header class="header">
+      <div class="client">
+        <h2 id="title">Selecciona una conversación</h2>
+        <div id="subtitle">La interfaz está conectada a PostgreSQL</div>
+      </div>
+      <div class="actions">
+        <button id="take" class="btn primary" disabled>Tomar control</button>
+        <button id="release" class="btn" disabled>Devolver a IA</button>
+      </div>
+    </header>
+
+    <section id="chat" class="chat">
+      <div class="empty"><strong>Conversaciones</strong>Selecciona un cliente de la izquierda para ver el historial.</div>
+    </section>
+
+    <div class="composer">
+      <textarea id="message" placeholder="Escribe aquí cuando estés en modo humano…" disabled></textarea>
+      <button id="send" class="btn primary" disabled>Enviar</button>
+    </div>
+  </main>
+</div>
+
+<script>
+const state={data:[], selected:null, filter:"all", search:""};
+
+function pick(obj, keys, fallback=""){
+  for(const k of keys) if(obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== "") return obj[k];
+  return fallback;
+}
+function formatDate(v){
+  if(!v) return "";
+  const d=new Date(v); if(Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleString("es-MX",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+}
+function mode(c){return pick(c,["modo","mode"],"IA").toUpperCase()}
+function status(c){return pick(c,["estado","status"],"ACTIVA")}
+function displayName(c){return pick(c,["nombre_cliente","nombre","cliente","sender_name","telefono","phone"],"Cliente")}
+function phone(c){return pick(c,["telefono","phone","phone_number","numero"],"")}
+function lastText(c){return pick(c,["ultimo_mensaje","mensaje","ultimo_mensaje_texto","texto"],"")}
+function lastDate(c){return pick(c,["actualizada_en","ultimo_mensaje_en","creada_en","created_at"],"")}
+
+async function load(){
+  const r=await fetch("/api/conversations");
+  const j=await r.json();
+  if(!j.ok) throw new Error(j.error||"No se pudieron cargar las conversaciones");
+  state.data=j.conversations||[];
+  renderList();
+}
+function renderList(){
+  const q=state.search.toLowerCase();
+  const rows=state.data.filter(c=>{
+    const m=mode(c);
+    const text=(displayName(c)+" "+phone(c)+" "+lastText(c)).toLowerCase();
+    return (state.filter==="all"||m===state.filter) && (!q||text.includes(q));
+  });
+  const el=document.getElementById("list");
+  if(!rows.length){el.innerHTML='<div class="notice">No hay conversaciones para mostrar.</div>';return}
+  el.innerHTML=rows.map((c,i)=>{
+    const id=c.id;
+    return `<div class="item ${state.selected&&String(state.selected.id)===String(id)?"selected":""}" data-id="${id}">
+      <div class="row"><span class="name">${esc(displayName(c))}</span><span class="time">${esc(formatDate(lastDate(c)))}</span></div>
+      <div class="row" style="margin-top:6px"><span class="preview">${esc(lastText(c)||phone(c)||"Sin mensajes")}</span><span class="badge ${mode(c)==="HUMANO"?"human":status(c)==="CITA_PENDIENTE"?"pending":""}">${esc(mode(c))}</span></div>
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".item").forEach(x=>x.onclick=()=>select(x.dataset.id));
+}
+async function select(id){
+  state.selected=state.data.find(c=>String(c.id)===String(id))||null;
+  renderList();
+  if(!state.selected)return;
+  document.getElementById("title").textContent=displayName(state.selected);
+  document.getElementById("subtitle").textContent=[phone(state.selected),status(state.selected),mode(state.selected)].filter(Boolean).join(" · ");
+  document.getElementById("take").disabled=false;
+  document.getElementById("release").disabled=false;
+  document.getElementById("message").disabled=mode(state.selected)!=="HUMANO";
+  document.getElementById("send").disabled=mode(state.selected)!=="HUMANO";
+  const r=await fetch(`/api/conversations/${encodeURIComponent(id)}/messages`);
+  const j=await r.json();
+  renderChat(j.messages||[]);
+}
+function renderChat(msgs){
+  const el=document.getElementById("chat");
+  if(!msgs.length){el.innerHTML='<div class="empty"><strong>Sin mensajes todavía</strong>Esta conversación aún no tiene mensajes registrados en PostgreSQL.</div>';return}
+  el.innerHTML=msgs.map(m=>{
+    const dir=pick(m,["direccion","direction"],"ENTRANTE").toUpperCase();
+    const rem=pick(m,["remitente","sender"],"CLIENTE").toUpperCase();
+    const out=dir==="SALIENTE"||rem!=="CLIENTE";
+    const text=pick(m,["texto","mensaje","body","content"],"");
+    const dt=pick(m,["creado_en","created_at","timestamp"],"");
+    return `<div class="msg ${out?"out":"in"}">${esc(text)}<div class="meta">${esc(rem)} · ${esc(formatDate(dt))}</div></div>`;
+  }).join("");
+  el.scrollTop=el.scrollHeight;
+}
+async function setMode(m){
+  if(!state.selected)return;
+  const r=await fetch(`/api/conversations/${state.selected.id}/mode`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:m})});
+  const j=await r.json();
+  if(!j.ok){alert(j.error||"No se pudo cambiar el modo");return}
+  const idx=state.data.findIndex(c=>String(c.id)===String(state.selected.id));
+  if(idx>=0)state.data[idx]=j.conversation||state.data[idx];
+  state.selected=state.data[idx];
+  select(state.selected.id);
+}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]))}
+
+document.getElementById("search").oninput=e=>{state.search=e.target.value;renderList()};
+document.querySelectorAll(".filter").forEach(b=>b.onclick=()=>{document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));b.classList.add("active");state.filter=b.dataset.filter;renderList()});
+document.getElementById("take").onclick=()=>setMode("HUMANO");
+document.getElementById("release").onclick=()=>setMode("IA");
+document.getElementById("send").onclick=()=>alert("El envío por WhatsApp se conectará después. Por ahora esta interfaz es solo de visualización y control de modo.");
+load().catch(e=>document.getElementById("list").innerHTML=`<div class="notice">${esc(e.message)}</div>`);
+</script>
+</body>
+</html>

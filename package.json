@@ -1,0 +1,15 @@
+{
+  "name": "moreliacasas-interfaz",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interfaz de control de conversaciones de Morelia Casas",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@fastify/static": "^8.2.0",
+    "fastify": "^5.4.0",
+    "pg": "^8.16.3"
+  }
+}
