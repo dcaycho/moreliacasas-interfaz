@@ -85,7 +85,7 @@ function formatDate(v){
 function mode(c){return pick(c,["modo","mode"],"IA").toUpperCase()}
 function status(c){return pick(c,["estado","status"],"ACTIVA")}
 function displayName(c){return pick(c,["nombre_cliente","nombre","cliente","sender_name","telefono","phone"],"Cliente")}
-function phone(c){return pick(c,["telefono","phone","phone_number","numero"],"")}
+function phone(c){return pick(c,["cliente_telefono","telefono","phone","phone_number","numero"],"")}
 function lastText(c){return pick(c,["ultimo_mensaje","mensaje","ultimo_mensaje_texto","texto"],"")}
 function lastDate(c){return pick(c,["actualizada_en","ultimo_mensaje_en","creada_en","created_at"],"")}
 

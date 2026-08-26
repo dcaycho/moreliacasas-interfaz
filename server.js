@@ -68,31 +68,46 @@ app.get("/api/conversations", async (request, reply) => {
     }
 
     const columns = await tableColumns("conversaciones");
-    const safeColumns = columns.map(c => `"${c.replace(/"/g, '""')}"`).join(", ");
+
     const orderCol = columns.includes("actualizada_en")
-      ? `"actualizada_en"`
+      ? "actualizada_en"
       : columns.includes("ultimo_mensaje_en")
-      ? `"ultimo_mensaje_en"`
+      ? "ultimo_mensaje_en"
       : columns.includes("id")
-      ? `"id"`
+      ? "id"
       : null;
 
     const sql = `
-      SELECT ${safeColumns},
+      SELECT
+        conv.*,
+        cli.nombre AS cliente_nombre,
+        cli.telefono AS cliente_telefono,
         (
           SELECT m."texto"
           FROM "mensajes" m
-          WHERE m."conversacion_id" = "conversaciones"."id"
+          WHERE m."conversacion_id" = conv."id"
           ORDER BY m."id" DESC
           LIMIT 1
-        ) AS "ultimo_mensaje_texto"
-      FROM "conversaciones"
-      ${orderCol ? `ORDER BY ${orderCol} DESC` : ""}
+        ) AS ultimo_mensaje_texto
+      FROM "conversaciones" conv
+      LEFT JOIN "clientes" cli
+        ON cli."id" = conv."cliente_id"
+      ${orderCol ? `ORDER BY conv."${orderCol}" DESC` : ""}
       LIMIT 200
     `;
 
     const r = await pool.query(sql);
-    return { ok: true, conversations: r.rows, columns };
+
+    return {
+      ok: true,
+      conversations: r.rows,
+      columns: [
+        ...columns,
+        "cliente_nombre",
+        "cliente_telefono",
+        "ultimo_mensaje_texto"
+      ]
+    };
   } catch (err) {
     reply.code(500);
     return { ok: false, error: err.message };
