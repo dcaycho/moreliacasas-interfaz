@@ -119,7 +119,7 @@ async function select(id){
   renderList();
   if(!state.selected)return;
   document.getElementById("title").textContent=displayName(state.selected);
-  document.getElementById("subtitle").textContent=[phone(state.selected),status(state.selected),mode(state.selected)].filter(Boolean).join(" · ");
+  document.getElementById("subtitle").textContent=[state.selected.cliente_telefono||"",status(state.selected),mode(state.selected)].filter(Boolean).join(" · ");
   document.getElementById("take").disabled=false;
   document.getElementById("release").disabled=false;
   document.getElementById("message").disabled=mode(state.selected)!=="HUMANO";
