@@ -130,12 +130,21 @@ function phone(c){return pick(c,["cliente_telefono","telefono","phone","phone_nu
 function lastText(c){return pick(c,["ultimo_mensaje","mensaje","ultimo_mensaje_texto","texto"],"")}
 function lastDate(c){return pick(c,["actualizada_en","ultimo_mensaje_en","creada_en","created_at"],"")}
 
-async function load(){
-  const r=await fetch("/api/conversations");
-  const j=await r.json();
-  if(!j.ok) throw new Error(j.error||"No se pudieron cargar las conversaciones");
-  state.data=j.conversations||[];
-  renderList();
+async function load(silent=false){
+  try{
+    const r=await fetch("/api/conversations");
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error||"No se pudieron cargar las conversaciones");
+    state.data=j.conversations||[];
+    renderList();
+    if(state.selected){
+      const mr=await fetch("/api/conversations/"+encodeURIComponent(state.selected.id)+"/messages");
+      const mj=await mr.json();
+      if(mj.ok && mj.messages) renderChat(mj.messages);
+    }
+  }catch(e){
+    if(!silent) document.getElementById("list").innerHTML=`<div class="notice">${esc(e.message)}</div>`;
+  }
 }
 function renderList(){
   const q=state.search.toLowerCase();
@@ -199,8 +208,47 @@ document.getElementById("search").oninput=e=>{state.search=e.target.value;render
 document.querySelectorAll(".filter").forEach(b=>b.onclick=()=>{document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));b.classList.add("active");state.filter=b.dataset.filter;renderList()});
 document.getElementById("take").onclick=()=>setMode("HUMANO");
 document.getElementById("release").onclick=()=>setMode("IA");
-document.getElementById("send").onclick=()=>alert("El envío por WhatsApp se conectará después. Por ahora esta interfaz es solo de visualización y control de modo.");
+async function sendMessage(){
+  if(!state.selected) return;
+  const input=document.getElementById("message");
+  const btn=document.getElementById("send");
+  const texto=input.value.trim();
+  if(!texto) return;
+
+  btn.disabled=true;
+  input.disabled=true;
+
+  try{
+    const r=await fetch("/api/conversations/"+encodeURIComponent(state.selected.id)+"/send",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({texto})
+    });
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error||"No se pudo enviar el mensaje");
+
+    input.value="";
+    const mr=await fetch("/api/conversations/"+encodeURIComponent(state.selected.id)+"/messages");
+    const mj=await mr.json();
+    if(mj.ok && mj.messages) renderChat(mj.messages);
+    load(true);
+  }catch(e){
+    alert("Error al enviar mensaje: "+e.message);
+  }finally{
+    btn.disabled=false;
+    input.disabled=false;
+    input.focus();
+  }
+}
+document.getElementById("send").onclick=sendMessage;
+document.getElementById("message").onkeydown=e=>{
+  if(e.key==="Enter" && !e.shiftKey){
+    e.preventDefault();
+    sendMessage();
+  }
+};
 document.getElementById("mobileList").onclick=()=>document.querySelector('.app').classList.toggle('mobile-list-open');
+setInterval(()=>load(true), 4000);
 load().catch(e=>document.getElementById("list").innerHTML=`<div class="notice">${esc(e.message)}</div>`);
 </script>
 </body>
