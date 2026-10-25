@@ -207,6 +207,67 @@ app.post("/api/conversations/:id/mode", async (request, reply) => {
   }
 });
 
+
+app.post("/api/conversations/:id/send", async (request, reply) => {
+  try {
+    const id = request.params.id;
+    const texto = String(request.body?.texto || "").trim();
+
+    if (!texto) {
+      return reply.code(400).send({ ok: false, error: "El mensaje está vacío" });
+    }
+
+    if (!(await tableExists("conversaciones"))) {
+      return reply.code(404).send({ ok: false, error: "Tabla conversaciones no existe" });
+    }
+
+    const columns = await tableColumns("conversaciones");
+    if (!columns.includes("modo")) {
+      return reply.code(400).send({ ok: false, error: "La tabla conversaciones no tiene columna modo" });
+    }
+
+    const conv = await pool.query('SELECT * FROM "conversaciones" WHERE "id" = $1 LIMIT 1', [id]);
+    if (!conv.rows.length) {
+      return reply.code(404).send({ ok: false, error: "Conversación no encontrada" });
+    }
+
+    const conversation = conv.rows[0];
+    if (String(conversation.modo || "").toUpperCase() !== "HUMANO") {
+      return reply.code(400).send({ ok: false, error: "La conversación no está en modo HUMANO" });
+    }
+
+    const response = await fetch(
+      "https://agentemoreliacasas-n8n.u1kbuu.easypanel.host/webhook/morelia-casas-humano-send",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversation_id: Number(id),
+          texto
+        })
+      }
+    );
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || (data && data.ok === false)) {
+      return reply.code(502).send({
+        ok: false,
+        error: data?.error || "Error al enviar mensaje por webhook n8n"
+      });
+    }
+
+    if (columns.includes("actualizada_en")) {
+      await pool.query('UPDATE "conversaciones" SET "actualizada_en" = NOW() WHERE "id" = $1', [id]);
+    }
+
+    return { ok: true, sent: true };
+  } catch (err) {
+    reply.code(500);
+    return { ok: false, error: err.message };
+  }
+});
+
 app.get("/", async (request, reply) => {
   return reply.sendFile("index.html");
 });
